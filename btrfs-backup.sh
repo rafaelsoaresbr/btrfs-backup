@@ -21,11 +21,9 @@
 # respective directories in REMOTE_BACKUP_PATHS.
 
 # Make sure all of these paths exist
-LOCAL_SUBVOLS=(			"/"							"/home"						"/btrfs/vm"					)
-LOCAL_BACKUP_PATHS=(	"/backup"					"/home/backup"				"/btrfs/vm/backup"			)
-REMOTE_BACKUP_PATHS=(	"/btrfs/backup_bulky/root"	"/btrfs/backup_bulky/home"	"/btrfs/backup_bulky/vm"	)
-
-REMOTE="root@s"
+LOCAL_SUBVOLS=(			"/media/root/pool/@"			"/media/root/pool/@home"			)
+LOCAL_BACKUP_PATHS=(	"/media/root/pool/@"				"/media/root/pool/@home"					)
+REMOTE_BACKUP_PATHS=(	"/media/boss/backup/@"			"/media/boss/backup/@home"			)
 
 # abort on error
 set -e
@@ -47,7 +45,7 @@ for i in "${!LOCAL_SUBVOLS[@]}"; do
 
 	# fetch backup directory listings for both hosts
 	LOCAL_LIST=$(ls -1 "${LOCAL_BACKUP_PATHS[$i]}")
-	REMOTE_LIST=$(ssh "$REMOTE" ls -1 "${REMOTE_BACKUP_PATHS[$i]}")
+	REMOTE_LIST=$(ls -1 "${REMOTE_BACKUP_PATHS[$i]}")
 
 	# find most recent subvolume which is on both hosts by first taking the
 	# intersection of $LOCAL_LIST and $REMOTE_LIST, then sorting it in reverse
@@ -69,7 +67,7 @@ for i in "${!LOCAL_SUBVOLS[@]}"; do
 			sync
 
 			echo "sending subvolume: \"${LOCAL_SUBVOLS[$i]}\""
-			sudo btrfs send -v "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | ssh "$REMOTE" "btrfs receive -v \"${REMOTE_BACKUP_PATHS[$i]}/\""
+			sudo btrfs send -v "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | btrfs receive -v "${REMOTE_BACKUP_PATHS[$i]}"
 			echo
 		fi
 	else
@@ -78,7 +76,7 @@ for i in "${!LOCAL_SUBVOLS[@]}"; do
 		sync
 
 		echo "sending incremental snapshot from: \"$MOST_RECENT\" to: \"$TIMESTAMP\""
-		sudo btrfs send -v -p "${LOCAL_BACKUP_PATHS[$i]}/$MOST_RECENT" "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | ssh "$REMOTE" "btrfs receive -v \"${REMOTE_BACKUP_PATHS[$i]}/\""
+		sudo btrfs send -v -p "${LOCAL_BACKUP_PATHS[$i]}/$MOST_RECENT" "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | btrfs receive -v "${REMOTE_BACKUP_PATHS[$i]}"
 		echo
 	fi
 done
