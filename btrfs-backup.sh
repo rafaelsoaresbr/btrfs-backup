@@ -9,21 +9,21 @@
 
 # btrfs-backup.sh
 # This script creates local snapshot backups of given subvolumes and sends them
-# to a remote server. Before sending, the script will look for the most recent
+# to a external disk. Before sending, the script will look for the most recent
 # "common" snapshot of a subvolume, ie. a snapshot that exists both locally and
-# on the remote. The script then proceeds to send only an incremental update
+# on the destination. The script then proceeds to send only an incremental update
 # from the common snapshot to the newly created snapshot.
 
 # Setup
 # All btrfs subvolumes from LOCAL_SUBVOLS will first be snapshotted into the
 # respective directories in LOCAL_BACKUP_PATHS, which must reside on the
-# subvolume itself. Each snapshot will then be sent to the remote to the
-# respective directories in REMOTE_BACKUP_PATHS.
+# subvolume itself. Each snapshot will then be sent to the respective
+# directories in REMOTE_BACKUP_PATHS (External Disk's mount point).
 
 # Make sure all of these paths exist
-LOCAL_SUBVOLS=(			"/media/root/pool/@"			"/media/root/pool/@home"			)
-LOCAL_BACKUP_PATHS=(	"/media/root/pool/@"				"/media/root/pool/@home"					)
-REMOTE_BACKUP_PATHS=(	"/media/boss/backup/@"			"/media/boss/backup/@home"			)
+LOCAL_SUBVOLS=(			"/media/root/pool/@"		"/media/root/pool/@home"	)
+LOCAL_BACKUP_PATHS=(	"/media/root/pool/@"		"/media/root/pool/@home"	)
+REMOTE_BACKUP_PATHS=(	"/media/boss/backup/@"		"/media/boss/backup/@home"	)
 
 # abort on error
 set -e
