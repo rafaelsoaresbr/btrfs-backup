@@ -65,7 +65,7 @@ backup(){
 main(){
   zenity --info --title="btrfs-backup" \
          --text="You are about to make a backup of a btrfs subvolume. First select the SOURCE subvolume." 2>/dev/null
-	LOCAL_SUBVOL=get_dir
+  LOCAL_SUBVOL=get_dir
   zenity --info --title="btrfs-backup" --text="Now select the TARGET subvolume." 2>/dev/null
   REMOTE_BACKUP_PATH=get_dir
   if $(zenity --question --title="btrfs-backup" --default-cancel \
