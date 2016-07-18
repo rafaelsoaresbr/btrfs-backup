@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 # Licensed under the GNU GPLv2 by the Free Software Foundation
 # Copyright: Rasmus Eskola 2014
@@ -9,76 +9,79 @@
 
 # btrfs-backup.sh
 # This script creates local snapshot backups of given subvolumes and sends them
-# to a external disk. Before sending, the script will look for the most recent
+# to a remote file system. Before sending, the script will look for the most recent
 # "common" snapshot of a subvolume, ie. a snapshot that exists both locally and
 # on the destination. The script then proceeds to send only an incremental update
 # from the common snapshot to the newly created snapshot.
 
 # Setup
-# All btrfs subvolumes from LOCAL_SUBVOLS will first be snapshotted into the
-# respective directories in LOCAL_BACKUP_PATHS, which must reside on the
-# subvolume itself. Each snapshot will then be sent to the respective
-# directories in REMOTE_BACKUP_PATHS (External Disk's mount point).
+# The script will ask for a btrfs subvolume that will first be snapshotted into
+# the into local directories which resides on the subvolume itself.
+# Each snapshot will then be sent to the remote filesystem (monted locally).
 
-# Make sure all of these paths exist
-LOCAL_SUBVOLS=(			"/media/root/pool/@"		"/media/root/pool/@home"	)
-LOCAL_BACKUP_PATHS=(	"/media/root/pool/@"		"/media/root/pool/@home"	)
-REMOTE_BACKUP_PATHS=(	"/media/boss/backup/@"		"/media/boss/backup/@home"	)
+get_dir(){
+  DIR=$(zenity --file-selection --title="Select a directory" --directory 2>/dev/null)
+  case $? in
+    0)  zenity --info --title="btrfs-backup" --text="\"$DIR\" selected." 2>/dev/null; echo "$DIR";;
+    1)  zenity --error --title="btrfs-backup" --text="No directory selected. Please select a directory." 2>/dev/null; get_dir;;
+    -1) zenity --error --title="btrfs-backup" --text="An unexpected error has occurred. Quitting." 2>/dev/null;;
+  esac
+}
 
-# abort on error
-set -e
-
-# must be in a format that can be sorted
-TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
-
-echo "creating snapshots of the following subvolumes: \"${LOCAL_SUBVOLS[@]}\""
-echo -e "are you sure you want to continue? (y/N)"
-read answer
-if [[ "$answer" != "y" ]]; then
-	echo "aborting."
-	exit
-fi
-echo
-
-for i in "${!LOCAL_SUBVOLS[@]}"; do
-	echo "subvolume: \"${LOCAL_SUBVOLS[$i]}\", remote path: \"${REMOTE_BACKUP_PATHS[$i]}\""
-
-	# fetch backup directory listings for both hosts
-	LOCAL_LIST=$(ls -1 "${LOCAL_BACKUP_PATHS[$i]}")
-	REMOTE_LIST=$(ls -1 "${REMOTE_BACKUP_PATHS[$i]}")
+backup(){
+	# must be in a format that can be sorted
+	TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
 
 	# find most recent subvolume which is on both hosts by first taking the
 	# intersection of $LOCAL_LIST and $REMOTE_LIST, then sorting it in reverse
 	# order (newest first), then picking the first row out
-	MOST_RECENT=$(comm -1 -2 <(echo "$LOCAL_LIST") <(echo "$REMOTE_LIST") | sort -r | head -n1)
+	MOST_RECENT=$(comm -1 -2 <(echo "$1") <(echo "$2") | sort -r | head -n1)
 
-	# no common snapshot found, send entire subvolume
-	if [[ $MOST_RECENT == "" ]]; then
-		echo "no common snapshot found for subvolume: \"${LOCAL_SUBVOLS[$i]}\""
-		echo "do you want to send the entire subvolume instead?"
-		echo "this will probably take a long time. (y/N)"
-
-		read answer
-		if [[ "$answer" != "y" ]]; then
-			echo "skipping subvolume: \"${LOCAL_SUBVOLS[$i]}\""
-		else
-			# create snapshot
-			sudo btrfs subvolume snapshot -r "${LOCAL_SUBVOLS[$i]}" "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP"
-			sync
-
-			echo "sending subvolume: \"${LOCAL_SUBVOLS[$i]}\""
-			sudo btrfs send -v "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | btrfs receive -v "${REMOTE_BACKUP_PATHS[$i]}"
-			echo
-		fi
-	else
-		# create snapshot
-		sudo btrfs subvolume snapshot -r "${LOCAL_SUBVOLS[$i]}" "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP"
+  if [ "$MOST_RECENT" != "" ] ; then
+    zenity --info --title="btrfs-backup" --text="Previous backup detected! Making an incremental backup." 2>/dev/null
+    (
+		sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
 		sync
+		sudo btrfs send -v -p "$1/$MOST_RECENT" "$1/$TIMESTAMP" | btrfs receive -v "$2"
+    ) |
+    zenity --progress --title="btrfs-backup" --text="Copying..." --percentage=0 2>/dev/null
+    if [ "$?" = -1 ] ; then
+      zenity --error --title="btrfs-backup" --text="An unexpected error has occurred." 2>/dev/null
+    fi
+  else
+    zenity --info --title="btrfs-backup" --text="It's the first backup! It may take long." 2>/dev/null
+    (
+		sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
+		sync
+		sudo btrfs send -v "$1/$TIMESTAMP" | btrfs receive -v "$2"
+    ) |
+    zenity --progress --title="btrfs-backup" --text="Backing up..." --percentage=0 2>/dev/null
+    if [ "$?" = -1 ] ; then
+      zenity --error --title="btrfs-backup" --text="An unexpected error has occurred." 2>/dev/null
+    fi
+  fi
+}
 
-		echo "sending incremental snapshot from: \"$MOST_RECENT\" to: \"$TIMESTAMP\""
-		sudo btrfs send -v -p "${LOCAL_BACKUP_PATHS[$i]}/$MOST_RECENT" "${LOCAL_BACKUP_PATHS[$i]}/$TIMESTAMP" | btrfs receive -v "${REMOTE_BACKUP_PATHS[$i]}"
-		echo
-	fi
-done
+main(){
+  zenity --info --title="btrfs-backup" \
+         --text="You are about to make a backup of a btrfs subvolume. First select the SOURCE subvolume." 2>/dev/null
+	LOCAL_SUBVOL=get_dir
+  zenity --info --title="btrfs-backup" --text="Now select the TARGET subvolume." 2>/dev/null
+  REMOTE_BACKUP_PATH=get_dir
+  if $(zenity --question --title="btrfs-backup" --default-cancel \
+         --text="The following subvolume will be backed up: \"$LOCAL_SUBVOL\" to \"$REMOTE_BACKUP_PATH\". Are you sure you wish to proceed?" 2>/dev/null)
+  then
+    backup "$LOCAL_SUBVOL" "$REMOTE_BACKUP_PATH"
+  else
+    zenity --info --title="btrfs-backup" --text="Quitting." 2>/dev/null
+  fi
+}
 
-echo "All done!"
+LICENSE=$(dirname "$0")/LICENSE
+zenity --text-info --title="License" --filename="$LICENSE" --checkbox="I read and accept the terms." 2>/dev/null
+
+case $? in
+  0)  main;;
+  1)  zenity --info --title="License" --text="You must accept the license to use this software." 2>/dev/null;;
+  -1) zenity --error --title="License" --text="An unexpected error has occurred." 2>/dev/null;;
+esac
