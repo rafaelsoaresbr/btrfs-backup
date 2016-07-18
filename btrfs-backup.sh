@@ -29,20 +29,20 @@ get_dir(){
 }
 
 backup(){
-	# must be in a format that can be sorted
-	TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
+  # must be in a format that can be sorted
+  TIMESTAMP=$(date +%Y-%m-%d_%H:%M:%S)
 
-	# find most recent subvolume which is on both hosts by first taking the
-	# intersection of $LOCAL_LIST and $REMOTE_LIST, then sorting it in reverse
-	# order (newest first), then picking the first row out
-	MOST_RECENT=$(comm -1 -2 <(echo "$1") <(echo "$2") | sort -r | head -n1)
+  # find most recent subvolume which is on both hosts by first taking the
+  # intersection of $LOCAL_LIST and $REMOTE_LIST, then sorting it in reverse
+  # order (newest first), then picking the first row out
+  MOST_RECENT=$(comm -1 -2 <(echo "$1") <(echo "$2") | sort -r | head -n1)
 
   if [ "$MOST_RECENT" != "" ] ; then
     zenity --info --title="btrfs-backup" --text="Previous backup detected! Making an incremental backup." 2>/dev/null
     (
-		sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
-		sync
-		sudo btrfs send -v -p "$1/$MOST_RECENT" "$1/$TIMESTAMP" | btrfs receive -v "$2"
+    sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
+    sync
+    sudo btrfs send -v -p "$1/$MOST_RECENT" "$1/$TIMESTAMP" | btrfs receive -v "$2"
     ) |
     zenity --progress --title="btrfs-backup" --text="Copying..." --percentage=0 2>/dev/null
     if [ "$?" = -1 ] ; then
@@ -51,9 +51,9 @@ backup(){
   else
     zenity --info --title="btrfs-backup" --text="It's the first backup! It may take long." 2>/dev/null
     (
-		sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
-		sync
-		sudo btrfs send -v "$1/$TIMESTAMP" | btrfs receive -v "$2"
+    sudo btrfs subvolume snapshot -r "$1" "$2/$TIMESTAMP"
+    sync
+    sudo btrfs send -v "$1/$TIMESTAMP" | btrfs receive -v "$2"
     ) |
     zenity --progress --title="btrfs-backup" --text="Backing up..." --percentage=0 2>/dev/null
     if [ "$?" = -1 ] ; then
